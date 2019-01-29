@@ -1,0 +1,97 @@
+(require 'cl)
+
+(defun arg-parse-error (msg)
+  (message msg)
+  (kill-emacs))
+
+(defun verify-commandline-spec (spec)
+  (let ((spec-checkers '((lambda (x) (unless (eq x 'position)
+                                       (let (ret)
+                                         (dolist (name x)
+                                           (unless (stringp name)
+                                             (setq ret "invalid name type")))
+                                         ret)))
+                         (lambda (x) (unless (listp x) "expect list type for arglist" ))
+                         (lambda (x) (unless (stringp x) "expect string type for docstring"))))
+        error-str fn s funcs current-form)
+    (while (and spec (not error-str))
+      (setq s (car spec)
+            current-form s
+            spec (cdr spec)
+            funcs spec-checkers)
+      (unless (>= (length s) 4)
+        (arg-parse-error (format "Expected length >= 4: '%s' " s)))
+      (while (and spec-checkers s funcs (not error-str))
+        (setq fn (car funcs)
+              funcs (cdr funcs)
+              item (car s)
+              s (cdr s))
+        (setq error-str (funcall fn item))))
+    (when error-str
+      (arg-parse-error (format "command-line option spec error: '%s', form='%s" error-str current-form)))))
+
+(defmacro popn (lst n)
+  "remove and return the first N items of list LST as a list"
+  (assert (symbolp lst))
+  `(let ((__list ,lst)
+         (__n ,n)
+         ret)
+     (while (and __list (> __n 0))
+       (setq ret (cons (car __list) ret)
+             __list (cdr __list)
+             __n (1- __n)))
+     (setq ,lst __list)
+     (nreverse ret)))
+
+(defun print-arg-help (spec cmd-name)
+  (let (positional optional)
+    (dolist (arg spec)
+      (let ((keys (pop arg))
+            (argnames (pop arg))
+            (doc (pop arg)))
+        (if (eq keys 'position)
+            (push (cons (upcase (symbol-name (car argnames))) doc) positional)
+          (when (and doc (> (length doc) 0))
+            (push (cons keys doc) optional)))))
+    (message "%s  [OPTIONS] %s\n" cmd-name (mapconcat 'car positional " "))
+    (dolist (p positional)
+      (message (car p))
+      (message (concat "       " (cdr p))))
+    (message "\nOPTIONS:")
+    (dolist (o optional)
+      (message (mapconcat 'identity (car o) ", "))
+      (message (concat "       " (cdr o))))))
+
+(defun parse-args (spec &optional arg-list no-default)
+  (verify-commandline-spec spec)
+
+  (let ((args (or arg-list (and (not no-default) (cdr command-line-args))))
+        names doc body positional-args named-args fn)
+    
+    (dolist (s spec)
+      (if (eq (car s) 'position)
+          (setq positional-args (cons (cons 'lambda (cdr s)) positional-args))
+
+        (dolist (name (car s))
+          (setq named-args (cons `(,name . (lambda ,@(cdr s))) named-args)))))
+
+    (while args
+      (setq a (car args)
+            args (cdr args)) 
+      (setq fn (cdr (assoc a named-args)))
+      (if fn
+          (progn
+            (setq nargs (length (cadr fn)))
+            (setq fn-args (popn args nargs))
+            (when (not (= (length fn-args) nargs))
+              (arg-parse-error (format "Option %s expected at least %d args" a nargs)))
+            (apply fn fn-args))
+
+        (setq fn (car positional-args)
+              positional-args (cdr positional-args))
+        (if fn
+            (funcall fn a)
+          (arg-parse-error (format "Unexpected arg: %s" a))))
+      )))
+
+(provide 'arg-parser)

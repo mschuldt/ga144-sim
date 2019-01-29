@@ -1,0 +1,7 @@
+( ga-load crystal.aforth /dev/ttyUSB3 460800 )
+( 32.768 khz watch crystal from 715.17 to GND )
+
+node 715
+include 715crystal.aforth
+: run !b !b @ drop ( ADD CUSTOM CALLS HERE) run ;
+

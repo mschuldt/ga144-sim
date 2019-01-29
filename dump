@@ -1,0 +1,34 @@
+#!/usr/bin/env racket
+;; -*- scheme  -*-
+#lang racket
+
+(require "src/ga-compile-print.rkt"
+         "src/el.rkt")
+
+(define bootstream-type (make-parameter false))
+(define symbols? (make-parameter false))
+(define pretty? (make-parameter false))
+(define count? (make-parameter false))
+(define hex? (make-parameter false))
+
+(define input-file
+  (command-line
+   #:once-each
+   [("-b" "--bootstream") bs "bootstream type"
+    (bootstream-type bs)]
+   [("-s" "--symbols") "include symboltable"
+    (symbols? t)]
+   [("-p" "--pretty") "print in human readable"
+    (pretty? t)]
+   [("-c" "--count") "count ram usage"
+    (count? t)]
+   [("-x" "--hex") "print numbers in hexadecimal format"
+    (hex? t)]
+   #:args (filename)
+   filename))
+
+(if (count?)
+    (print-count input-file)
+    (if (pretty?)
+        (print-pretty input-file hex?)
+        (print-json input-file bootstream-type symbols?)))
