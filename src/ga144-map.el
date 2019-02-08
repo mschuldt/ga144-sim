@@ -674,6 +674,7 @@
   (message "Node Activity"))
 
 (defun ga-format-str (str color)
+  (setq str (concat str))
   (when color
     (put-text-property 0 (length str) 'font-lock-face (list :foreground color) str))
   str)
