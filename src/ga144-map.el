@@ -637,51 +637,6 @@
         ga-node-usage-hash nil
         ga-node-locations nil))
 
-(defun ga-set-compilation-data (data)
-  (setq ga-error-data (compiled-error-info data))
-  (if ga-error-data
-      (progn (ga-set-compilation-status (format "FAIL: %s" (error-data-message ga-error-data)))
-             (message "Compilation fail: %s" (error-data-message ga-error-data))
-             (clear-compilation-data)
-             )
-    (progn
-      (setq ga-compilation-data data)
-      (setq ga-compiled-nodes (let ((ht (make-hash-table)))
-                                (dolist (node (compiled-nodes data))
-                                  (puthash (node-coord node)
-					   (vector-copy (node-mem node))ht))
-                                ht))
-      (setq ga-assembly-data (assemble data))
-      (setq ga-node-usage-list (ga-calculate-node-usage ga-assembly-data)) ;;TODO: remove
-      (setq ga-node-usage-hash (ga-alist->hash ga-node-usage-list)) ;;TODO: remove
-      (setq ga-node-locations (compiled-node-locations data))
-      (funcall ga-update-node-colors-fn)
-      (ga-update-node-usage ga-assembly-data)
-      (when ga-ram-display
-        (ga-update-ram-display-node)
-        ;;(sd-set-data ga-ram-display (ga-create-ram-display-data ga-current-coord)))
-        )
-      (ga-update-stack-displays)
-      (ga-set-compilation-status "Ok"))))
-
-(defun ga-update-compilation-data (&optional compilation-data)
-  (let ((old-ga-assembly-data ga-assembly-data))
-    (if compilation-data
-        (ga-set-compilation-data compilation-data)
-      (when ga-project-aforth-file
-        (unless ga-project-aforth-buffer
-          (setq ga-get-project-file-buffer ga-project-aforth-file))
-        (if ga-project-aforth-buffer
-            (ga-set-compilation-data (aforth-compile-buffer ga-project-aforth-buffer))
-          (error "unable to retrieve project aforth buffer")))
-      ;;TODO: maybe assemble, bootstream
-      )
-    (when ga-sim-p
-      (if (not (eq ga-assembly-data old-ga-assembly-data))
-          (ga-sim-load ga-assembly-data)
-        (message "Error: failed to update compilation. ga14 sim not updated"))))
-  (setq ga-compilation-data-changed t)) ;;TODO: what is this used for?
-
 (defun ga-update-node-usage (assembled)
   (dolist (node (compiled-nodes assembled))
     (set-ga-node-usage! (ga-coord->node (node-coord node))
@@ -922,25 +877,79 @@ Called after ga-current-node is set"
      (aset ga-node-ram-display-position (coord->index ga-current-coord) nil)
      (sd-center-on ga-ram-display ga-sim-node-P))))
 
-(defun ga-set-aforth-source (file &optional buffer)
-  (setq ga-project-aforth-file file)
-  (setq ga-project-aforth-buffer (or buffer (ga-get-project-file-buffer file)))
-  (add-to-list 'ga-project-aforth-buffers (ga-get-project-file-buffer file))
-  ;; set aforth-map-buffer in the aforth buffer to point to the buffer of this map
-  (let ((this-buffer (current-buffer)))
-    (if ga-project-aforth-buffer
-        (with-current-buffer ga-project-aforth-buffer
-          ;;todo: warn if value is different
-          (when (and (not (null aforth-map-buffer))
-                     (not (eq aforth-map-buffer this-buffer)))
-            (message "Warning: buffer '%s' appears to already be assocated with  another map buffer: %s (setting to '%s')"
-                     (current-buffer) aforth-map-buffer this-buffer))
+;;(defun ga-set-aforth-source (file &optional buffer)
+(defun ga-sim-set-data (json)
+  (setq ga-project-aforth-file (gethash "file" json))
+  ;; TODO:
+  ;;(setq ga-project-aforth-buffer (ga-get-project-file-buffer file))
 
-          (setq aforth-map-buffer this-buffer))
-      (error "unable to get buffer for project source file '%s'"  file)))
-
+  ;;(add-to-list 'ga-project-aforth-buffers (ga-get-project-file-buffer file))
   (ga-set-source-buffer-overlay)
-  (ga-update-compilation-data))
+  (ga-set-compilation-data json))
+
+;; https://www.emacswiki.org/emacs/OneOnOneEmacs
+
+(defun json-convert-symbols (json)
+  (let ((sym-ht (gethash "symbols" json))
+        syms)
+    (dolist (s (hash-table-keys sym-ht))
+      (push (symbol s (gethash s sym-ht) 0 0) ;TODO: line and column
+            syms))
+    syms))
+
+(defun json-to-assembled (json)
+  (let ((nodes nil)
+        n mem)
+    (dolist (node-json (hash-table-values (gethash "nodes" json)))
+      (setq mem (gethash "ram" node-json))
+      (setq n (node (gethash "coord" node-json)
+                    mem
+                    nil  ; buffer-map
+                    (length mem)
+                    nil)); buffer
+      (set-node-symbols! n (json-convert-symbols node-json))
+      (set-node-a! n (gethash "a" node-json))
+      (set-node-b! n (gethash "b" node-json))
+      (set-node-p! n (gethash "p" node-json))
+      (set-node-io! n (gethash "io" node-json))
+      (push n nodes))
+    (compiled nodes)))
+
+(defun json-to-compiled (json)
+  (let ((nodes (make-hash-table))
+        n mem)
+    (dolist (node-json (hash-table-values (gethash "nodes" json)))
+      (puthash (gethash "coord" node-json)
+               (gethash "asm" node-json)
+               nodes))
+    nodes))
+
+(defun ga-set-compilation-data (json)
+  ;;(setq ga-error-data (compiled-error-info data))
+  (setq ga-error-data nil) ;; TODO
+  (if ga-error-data
+      (progn (ga-set-compilation-status (format "FAIL: %s" (error-data-message ga-error-data)))
+             (message "Compilation fail: %s" (error-data-message ga-error-data))
+             (clear-compilation-data)
+             )
+    (progn
+      (setq ga-compilation-data json)
+
+      (setq ga-assembly-data (json-to-assembled json))
+      ;;(message (format "ga-assembly-data=%s" ga-assembly-data))
+      (setq ga-compiled-nodes (json-to-compiled json))
+      ;;(message (format "\n\nga-compiled-nodes=%s" ga-compiled-nodes))
+      (setq ga-node-usage-list (ga-calculate-node-usage ga-assembly-data))
+      (setq ga-node-usage-hash (ga-alist->hash ga-node-usage-list))
+      ;;(setq ga-node-locations (compiled-node-locations data))
+      (funcall ga-update-node-colors-fn)
+      (ga-update-node-usage ga-assembly-data)
+      (when ga-ram-display
+        (ga-update-ram-display-node)
+        ;;(sd-set-data ga-ram-display (ga-create-ram-display-data ga-current-coord))
+        )
+      (ga-update-stack-displays)
+      (ga-set-compilation-status "Ok"))))
 
 (defun ga-select-aforth-source ()
   ;;select the aforth source file for the current ga project
@@ -1318,7 +1327,10 @@ Elements of ALIST that are not conses are ignored."
   (if ga-load-bootstream
       (progn
         (message "Simulating bootstream")
+        ;; todo: get bootstream from input assembly
         (let ((bs (make-bootstream assembly "async"))) ;;TODO: other bootstream types
+          (message "bootstream:")
+          (message bs)
           (ga-sim-continue) ;;leaves all nodes in port exec mode
           (send ga-sim-ga144 load-bootstream bs))
         (send ga-sim-ga144 reset-time))
@@ -1596,34 +1608,24 @@ This resets the simulation"
       (assert f18node)
       (send f18node set-map-node node (current-buffer)))))
 
-(defun ga-open-map-for-buffer (aforth-buffer &optional buf-name-fmt)
-  (let* ((filename (buffer-file-name aforth-buffer))
-         (buffer-name (format (or buf-name-fmt "*GA144-%s*") (file-name-base filename)))
-         (buf (get-buffer buffer-name)))
-    (unless (ga-map-buffer-valid buf)
-      (setq buf nil))
-    (or buf
-        (progn
-          (setq buf (get-buffer-create buffer-name))
-          (with-current-buffer buf
-            (setq ga-map-view-mode t)
-            (setq ga-project-aforth-buffer aforth-buffer)
-            (setq ga-project-aforth-file filename)
-            (ga-mode)
-            ;;(ga-set-aforth-source filename)
-            )
-          buf))))
-
-(defun ga-open-map-for-simulation (aforth-buffer)
-  (let ((buf (ga-open-map-for-buffer aforth-buffer "*GA144 SIM: %s*")))
+;; called with current-buffer, with the aforth file loaded in it
+(defun ga-new-simulation (json)
+  ;;TODO: later get the names from json if there is more than one chip
+  (let ((buf (get-buffer-create "GA144")))
     (with-current-buffer buf
+      (setq ga-map-view-mode t)
+      (ga-mode)
+      (buffer-disable-undo)
+      ;;(ga-set-aforth-source filename)
+      (ga-sim-set-data json)
       (setq ga-sim-p t)
+      (setq aforth-buffer nil) ;; TODO: is this ok
       (setq ga-sim-ga144 (make-ga144 buffer-file-name nil aforth-buffer))
       (ga-set-map-nodes)
       (ga-sim-set-current-node ga-current-coord)
-      (ga-sim-recompile)
+      ;;(ga-sim-recompile)
       (ga-draw-map-in-frame-limits);;need to redraw to display simulation
-      ;(ga-sim-reset)
+      (ga-sim-reset)
       ;;TODO: this duplicate display should not be necessary
       )
     buf))
@@ -1689,9 +1691,9 @@ This resets the simulation"
               ga-region-nodes nil
               ga-region-path-p nil
               ga-visited-nodes (make-hash-table))
-        (when ga-project-aforth-file
-          ;;need to call ga-set-aforth-source so that it can update varous things
-          (ga-set-aforth-source ga-project-aforth-file))
+;;        (when ga-project-aforth-file ;; here
+;;          ;;need to call ga-set-aforth-source so that it can update varous things
+;;          (ga-set-aforth-source ga-project-aforth-file))
         (add-hook 'window-size-change-functions 'ga-handle-window-size-change)
         (ga-set-map-focus t)
         (add-hook 'buffer-list-update-hook 'ga-update-map-focus)

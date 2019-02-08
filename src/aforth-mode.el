@@ -375,6 +375,4 @@
 
   (run-hooks 'aforth-mode-hook))
 
-(add-to-list 'auto-mode-alist '("\\.aforth\\'" . aforth-mode))
-
 (provide 'aforth-mode)
