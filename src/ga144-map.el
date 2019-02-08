@@ -29,10 +29,6 @@
 (def-local ga-region-nodes nil) ;; ordered collection of all node coordinates in the region
 (def-local ga-region-path-p  nil) ;; t if ga-region-path-p represents a node path
 (def-local ga-visited-nodes nil) ;; hash table of visited nodes
-(def-local ga-color-select-buffer nil)
-(def-local ga-color-select-buffer-p nil)
-(def-local ga-color-select-map-buffer nil)
-(def-local ga-color-select-coord nil)
 (def-local ga-parse-data nil)
 (def-local ga-compilation-data nil)
 (def-local ga-compiled-nodes nil) ;; hash mapping nodes to compiled node memory array
@@ -110,14 +106,6 @@
       (setq buff (current-buffer))
       (bury-buffer))
     buff))
-
-(defun ga-aforth-files (dir)
-  (let ((ok '())
-        (files (directory-files dir)))
-    (dolist (file files)
-      (when (string-match "\\.aforth$" file)
-        (push file ok)))
-    ok))
 
 (defun ga-render( node-size )
   (setq ga-buffer-valid-p nil)
@@ -446,8 +434,6 @@
                                      :coord-overlay coord-overlay)))
     (setq ga-current-coord 0)
     (setq ram-display-moved nil)
-    (unless ga-map-view-mode
-      (ga-save))
     ))
 
 (defun ga-startup-reset ()
@@ -459,27 +445,6 @@
   (setq ga-current-coord 0
         ram-display-moved nil)
   (ga-reset-temp-faces))
-
-(defun ga-save ()
-  (interactive)
-  (unless ga-map-view-mode
-    (let ((ga-nodes-sans-overlays (vconcat (mapcar 'copy-sequence ga-nodes)))
-          node)
-      (dotimes (i 144)
-        (setq node (aref ga-nodes-sans-overlays i))
-        (set-ga-node-overlays! node nil)
-        (set-ga-node-coord-overlay! node nil))
-
-      (let ((print-level nil)
-            (print-length nil)
-            (values (mapcar (lambda (x) (cons x (eval x))) ga-persistent-variables))) ;;the values are buffer-local
-        (with-temp-file ga-project-file
-          (dolist (v values)
-            (insert "(setq " (symbol-name (car v)))
-            (print (cdr v) (current-buffer))
-            (insert ")\n\n")))))
-    (message "saved in %s" ga-project-file)
-    (set-buffer-modified-p nil)))
 
 (defun ga-inc-node-size ()
   (interactive)
@@ -951,16 +916,6 @@ Called after ga-current-node is set"
       (ga-update-stack-displays)
       (ga-set-compilation-status "Ok"))))
 
-(defun ga-select-aforth-source ()
-  ;;select the aforth source file for the current ga project
-  (interactive)
-  (if (eq major-mode 'ga-mode)
-      (let ((f (read-file-name "Set GA source: ")))
-        (if f
-            (ga-set-aforth-source f)
-          (message "GA144 aforth source not set")))
-    (message "Not in a GA144 project %s" major-mode)))
-
 (defun ga-reset-region ()
   (dolist (coord ga-region-nodes)
     (ga-set-region-face coord 'remove)
@@ -1173,6 +1128,7 @@ Elements of ALIST that are not conses are ignored."
 
 (defun ga-kill-map ()
   (interactive)
+  (kill-emacs)
   ;;TODO: cleanup map reference in .aforth buffer
   (let ((del (cond ((not (eq major-mode 'ga-mode)) nil)
                    (ga-sim-p t)
@@ -1184,115 +1140,12 @@ Elements of ALIST that are not conses are ignored."
     (when del
       (delete-windows-on (current-buffer))
       (kill-buffer))))
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; color selection
-
-(defun ga-color-node (coord color)
-  (set-buffer-modified-p t)
-  (ga-set-node-default-face coord (list :background color)))
-
-(defun ga-color-nodes (nodes color)
-  ;; nodes is a list of coordinates
-  (dolist (node nodes)
-    (ga-color-node node color)))
-
-(defun ga-select-color-at-line ()
-  (interactive)
-  (if ga-color-select-buffer-p
-      (let* ((start (progn (beginning-of-line) (point)))
-             (end (progn (end-of-line) (point)))
-             (str (buffer-substring-no-properties start end))
-             (name (car (split-string str "  ")))
-             (code (last (split-string str)))
-             (coord  ga-color-select-coord))
-        (with-current-buffer ga-color-select-map-buffer
-          (ga-color-select-callback coord name code)))
-    (message "Not in GA144 color selection buffer")))
-
-(defun ga-kill-color-select-buffer ()
-  (when ga-color-select-buffer
-    (kill-buffer ga-color-select-buffer)
-    (setq ga-color-select-buffer nil)))
-
-(defun ga-quit-color-select ()
-  (interactive)
-  (when (and ga-color-select-buffer-p
-             ga-color-select-map-buffer)
-    (with-current-buffer ga-color-select-map-buffer
-      (ga-kill-color-select-buffer))))
-
-(defun ga-color-select-callback (coord str code)
-  (when t ;;; (or (eq coord ga-current-coord)
-          ;;;   (y-or-n-p (format "Selected node from %s to %s. Apply color '%s' to node %s?"
-          ;;;                     coord ga-current-coord str ga-current-coord)))
-    (when (consp code)
-      (if(= (length code) 1)
-          (setq code (car code))
-        (error (format "invalid color code: %s" code))))
-
-    (if (> (length ga-region-nodes) 1)
-        (ga-color-nodes ga-region-nodes code)
-      (ga-color-node ga-current-coord code)))
-
-  (ga-quit-color-select)
-  (switch-to-buffer (current-buffer)))
-
-(defun ga-select-node-color ()
-  (interactive)
-  (if (and (eq major-mode 'ga-mode)
-           (not (null ga-current-coord)))
-
-      (let ((map-buf (current-buffer))
-            (coord ga-current-coord))
-
-        (ga-kill-color-select-buffer) ;;cleanup old color select buffer
-
-        (setq ga-color-select-buffer (get-buffer-create
-                                      (concat ga-project-name " GA144 color select" )))
-
-        (switch-to-buffer ga-color-select-buffer)
-        (setq ga-color-select-buffer-p t)
-        (setq ga-color-select-map-buffer map-buf)
-        (setq ga-color-select-coord coord)
-        (list-colors-display nil (buffer-name))
-        (use-local-map
-         (let ((map (make-sparse-keymap 'ga-color-select-map)))
-           (define-key map (kbd "<return>") 'ga-select-color-at-line)
-           (define-key map (kbd "q") 'ga-quit-color-select)
-           map)))
-    (message "Not in GA144 map buffer")))
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-(defun ga-draw-arrow ()
-  (interactive)
-  (error "TODO"))
-
-(defun ga-edit-node-text ()
-  (interactive)
-  (error "TODO"))
-
-(setq ga-svg-supported (require 'svg nil :no-error))
-
-(defun ga-export-as-svg ()
-  (interactive)
-  (if ga-svg-supported
-      (error "TODO")
-    (message "svg export is not supported without the svg library")))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defun ga-check-in-map-buffer()
   (and (boundp 'ga-nodes)
        (not (null ga-nodes))))
-
-(defun ga-view-project-file ()
-  (interactive)
-  (assert (ga-check-in-map-buffer))
-  (let ((filename ga-project-file))
-    (switch-to-buffer (get-buffer-create (format "*%s-project-file*" ga-project-name)))
-    (insert-file-contents-literally filename))
-  (emacs-lisp-mode))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -1337,14 +1190,6 @@ Elements of ALIST that are not conses are ignored."
     (send ga-sim-ga144 load assembly))
   (ga-update-current-node-registers))
 
-(defun ga-sim-recompile ()
-  "Recompile the simulation source files and update ga144 simulation
-This resets the simulation"
-  (interactive)
-  (assert ga-project-aforth-buffer)
-  (let ((this-buffer (current-buffer)))
-    (with-current-buffer ga-project-aforth-buffer
-      (aforth-update-compilation-for-map-buffer this-buffer))))
 
 (defun ga-sim-reset (&optional bootstream)
   (send ga-sim-ga144 reset!)
@@ -1543,7 +1388,6 @@ This resets the simulation"
         (define-key map (kbd "<down>") 'ga-move-down)
         (define-key map (kbd "<left>") 'ga-move-left)
         (define-key map (kbd "<right>") 'ga-move-right)
-        (define-key map (kbd "C-x C-s") 'ga-save)
         (define-key map (kbd "C-e") 'ga-move-right-end)
         (define-key map (kbd "C-a") 'ga-move-left-end)
         (define-key map (kbd "C-b") 'ga-move-left)
@@ -1557,7 +1401,6 @@ This resets the simulation"
         (define-key map (kbd "M-<") 'ga-move-top)
         (define-key map (kbd "M->") 'ga-move-bottom)
         (define-key map (kbd "<return>") 'ga-return-key-fn)
-        (define-key map (kbd "C-c C-f") 'ga-select-aforth-source)
         (define-key map (kbd "C-SPC") 'ga-set-mark)
         (define-key map (kbd "C-x C-x") 'ga-exchange-point-and-mark)
         (define-key map (kbd "C-g") 'ga-keyboard-quit)
@@ -1613,7 +1456,6 @@ This resets the simulation"
   ;;TODO: later get the names from json if there is more than one chip
   (let ((buf (get-buffer-create "GA144")))
     (with-current-buffer buf
-      (setq ga-map-view-mode t)
       (ga-mode)
       (buffer-disable-undo)
       ;;(ga-set-aforth-source filename)
@@ -1636,71 +1478,42 @@ This resets the simulation"
   (use-local-map ga-mode-map)
   (setq show-trailing-whitespace nil)
 
-  (when (not buffer-file-name)
-    (setq ga-map-view-mode t))
+  ;; set buffer local variables defaults
+  (setq ga-project-aforth-file-overlay (make-overlay 0 0))
+  (setq ga-node-size ga-default-node-size)
+  (setq ga-project-aforth-compile-status-overlay (make-overlay 0 1))
+  (setq ga-node-ram-display-position (make-vector 144 nil))
+  (ga-set-compilation-status "Unknown")
 
-  (if (or ga-map-view-mode
-          (string-match "ga144$" buffer-file-name))
-      (progn
-        (unless ga-map-view-mode
-          (setq ga-project-file buffer-file-name)
-          (setq ga-project-name (file-name-base buffer-file-name))
-          (assert ga-project-name)
-          (assert (not (string= ga-project-name "nil"))))
-        ;; open all files associated with this map, collect their buffers
-        (unless ga-map-view-mode
-          (setq ga-project-aforth-files (ga-aforth-files (file-name-directory  buffer-file-name)))
-          (setq ga-project-aforth-buffers (mapcar 'ga-get-project-file-buffer ga-project-aforth-files)))
-        ;; set buffer local variables defaults
-        (setq ga-project-aforth-file-overlay (make-overlay 0 0))
-        (setq ga-node-size ga-default-node-size)
-        (setq ga-project-aforth-compile-status-overlay (make-overlay 0 1))
-        (setq ga-node-ram-display-position (make-vector 144 nil))
-	(ga-set-compilation-status "Unknown")
+  (push (cons (buffer-name) (current-buffer)) ga-maps)
 
-        (if ga-map-view-mode
-            (push (cons (buffer-name) (current-buffer)) ga-maps)
-          (let ((buffer-name (format "*GA144-%s*" ga-project-name)))
-            (when (get-buffer buffer-name)
-              (kill-buffer buffer-name))
-            (rename-buffer buffer-name)
-            (push (cons buffer-name (current-buffer)) ga-maps)))
+  (setq buffer-file-name nil
+        ga-nodes nil
+        ga-nodes-sans-overlays nil
+        ga-current-coord nil)
 
-        (setq buffer-file-name nil
-              ga-nodes nil
-              ga-nodes-sans-overlays nil
-              ga-current-coord nil)
-        (unless ga-map-view-mode
-          (eval-buffer)
+  (ga-create-new)
 
-          (when ga-nodes-sans-overlays
-            (setq ga-nodes (ga-restore-node-overlays ga-nodes-sans-overlays))))
-
-        (if ga-nodes
-            (message "Loading GA144 project map...")
-          (unless ga-map-view-mode (print "Creating new ga144 map.."))
-          (ga-create-new))
-
-        (ga-startup-reset)
-        (ga-draw-map-in-frame-limits)
-        (set-buffer-modified-p nil)
-        (setq truncate-lines t) ;; any line wrap will ruin the map
-        (read-only-mode 1)
-        (setq visible-cursor nil
-              cursor-type nil
-              ga-region-nodes nil
-              ga-region-path-p nil
-              ga-visited-nodes (make-hash-table))
-;;        (when ga-project-aforth-file ;; here
-;;          ;;need to call ga-set-aforth-source so that it can update varous things
-;;          (ga-set-aforth-source ga-project-aforth-file))
-        (add-hook 'window-size-change-functions 'ga-handle-window-size-change)
-        (ga-set-map-focus t)
-        (add-hook 'buffer-list-update-hook 'ga-update-map-focus)
-        (add-hook 'kill-buffer-hook 'ga-kill-buffer-handler)
-        (ga-set-selected-node ga-current-coord)
-        (setq ga-buffer-valid-p t))
-    (message "ga144-mode: invalid file format")))
+  (ga-startup-reset)
+  (ga-draw-map-in-frame-limits)
+  (set-buffer-modified-p nil)
+  (setq truncate-lines t) ;; any line wrap will ruin the map
+  (read-only-mode 1)
+  (setq visible-cursor nil
+        cursor-type nil
+        ga-region-nodes nil
+        ga-region-path-p nil
+        ga-visited-nodes (make-hash-table))
+  ;;        (when ga-project-aforth-file ;; here
+  ;;          ;;need to call ga-set-aforth-source so that it can update varous things
+  ;;          (ga-set-aforth-source ga-project-aforth-file))
+  (add-hook 'window-size-change-functions 'ga-handle-window-size-change)
+  (ga-set-map-focus t)
+  (add-hook 'buffer-list-update-hook 'ga-update-map-focus)
+  (add-hook 'kill-buffer-hook 'ga-kill-buffer-handler)
+  (ga-set-selected-node ga-current-coord)
+  (setq ga-buffer-valid-p t)
+  )
 
 (defun ga-restore-node-overlays ( ga-nodes )
   (let (o)
