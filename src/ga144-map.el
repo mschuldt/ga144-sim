@@ -1158,7 +1158,8 @@ Elements of ALIST that are not conses are ignored."
          found)
     (while (and (null found)
                 (< coord max))
-      (setq found (assoc coord ga-node-locations))
+      (setq found (and ga-compiled-nodes
+                       (gethash coord ga-compiled-nodes)))
       (when (not found)
         (incf coord)))
     (when found
