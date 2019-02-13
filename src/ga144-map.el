@@ -878,6 +878,7 @@ Called after ga-current-node is set"
       (set-node-b! n (gethash "b" node-json))
       (set-node-p! n (gethash "p" node-json))
       (set-node-io! n (gethash "io" node-json))
+      (set-node-boot-code! n (gethash "boot_code" node-json))
       (push n nodes))
     (compiled nodes)))
 

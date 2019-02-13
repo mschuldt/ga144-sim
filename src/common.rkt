@@ -198,7 +198,8 @@
 ;; Compiling a program returns a list of these
 (struct node (coord mem buffer-map len (symbols #:auto) (word-dict #:auto)
                     (a #:auto) (b #:auto) (io #:auto) (stack #:auto) (p #:auto)
-                    (address-cells #:auto) (consts #:auto) (extern-funcs #:auto))
+                    (address-cells #:auto) (consts #:auto) (extern-funcs #:auto)
+                    (boot-code #:auto))
   #:mutable #:transparent)
 ;; 'coord' is the node coordinate this code belongs to
 ;; 'mem' is the vector of compiled words

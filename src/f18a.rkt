@@ -24,6 +24,7 @@
                (set! obj-key-counter (add1 obj-key-counter))
                (hash-set! obj-map_ key obj)))
     key))
+
 (define (lookup-obj name)
   (hash-ref obj-map_ name))
 
@@ -1087,19 +1088,23 @@
       ;;or the default value (if used) will be incorrectly incremented
       ;;;(reset-p!)
       ;;;(set! P (or (node-p node) P))
-      (set! P (or (node-p node) 0));;TODO: this boot descriptor should be set by the compiler
-
-      (set! iI 0)
-      (set! A (or (node-a node) A))
-      (set! B (or (node-b node) B))
-      (set! IO (or (node-io node) IO))
-      (for ((v (node-stack node)))
-        (d-push! v))
+      ;;(set! P (or (node-p node) 0))
       (let ((funcs (node-extern-funcs node)))
         (when funcs
           (set! extern-functions (make-vector MEM-SIZE false))
           (for ((i (length funcs)))
             (vector-set! extern-functions i (vector-ref funcs i)))))
+
+      (exec-boot-words! (node-boot-code node))
+      (set! P (or (node-p node) 0))
+
+      (set! A (or (node-a node) A))
+      (set! B (or (node-b node) B))
+      (set! IO (or (node-io node) IO))
+      (for ((v (node-stack node)))
+        (d-push! v))
+
+      (set! iI 0)
 
       (fetch-I)
 
@@ -1114,27 +1119,41 @@
         (set! ram-addr->name names)
         (set! ram-name->addr addrs)))
 
-    (define/public (execute-array code)
+    (define/public (set-virtual-port code)
       ;;Execute an array of words.
       ;;Make a fake port and port execute the code through it.
       ;;Used for loading bootstreams through a node.
       (define len (vector-length code))
-      (log (rkt-format "execute-array(): len(code)=~a" len))
-      (set! P #x300)
+      (set! P #x1ff)
       (define index 0)
-      (vector-set! memory #x300 (vector
-                                 (lambda ()
-                                   (if (< index len)
-                                       (let ((word (vector-ref code index)))
-                                         (set! index (add1 index))
-                                         (d-push! word)
-                                         t)
-                                       (err "execute: invalid index")))
-                                 (lambda (x) (err "execute: invalid port"))))
+      (vector-set! memory #x1ff
+                   (vector
+                    (lambda ()
+                      (if (< index len)
+                          (let ((word (vector-ref code index)))
+                            (set! index (add1 index))
+                            (set! fetched-data word)
+                            t)
+                          (begin
+                            (suspend "end of execute-array")
+                            nil)))
+                    (lambda (x) (err "execute-array: invalid port"))))
 
       (set! iI 0)
       (when suspended
         (wakeup)))
+
+    (define/public (exec-boot-words! words)
+      (define prev-suspended suspended)
+      (when (> (length words) 0)
+        (set-virtual-port words)
+        (set! fetch-next true)
+        (while (not suspended)
+          (step!))
+        (vector-set! memory #x1ff #x134a9)
+        (set! fetching-in-progress nil)
+        (when (not prev-suspended)
+          (wakeup))))
 
     (define/public (call-word! word)
       ;; only used for externally calling words from the debugger
