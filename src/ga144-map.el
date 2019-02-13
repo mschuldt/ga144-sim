@@ -31,6 +31,7 @@
 (def-local ga-visited-nodes nil) ;; hash table of visited nodes
 (def-local ga-parse-data nil)
 (def-local ga-compilation-data nil)
+(def-local ga-bootstream nil)
 (def-local ga-compiled-nodes nil) ;; hash mapping nodes to compiled node memory array
 (def-local ga-compilation-data-changed nil) ;; set true after compilation data is updated
 (def-local ga-assembly-data nil)
@@ -893,10 +894,10 @@ Called after ga-current-node is set"
 
 (defun json-to-bootstream (json)
   (let ((bs (gethash "bootstream" json)))
-    (unless (string= (gethash "type") "async")
-      (princ "Invalid bootstream type. only async to 708 supported"
-             #'external-debugging-output))
     (when bs
+      (unless (string= (gethash "type" bs) "async")
+        (princ "Invalid bootstream type. only async to 708 supported\n"
+               #'external-debugging-output))
       (gethash "stream" bs))))
 
 (defun ga-set-compilation-data (json)
@@ -911,7 +912,6 @@ Called after ga-current-node is set"
       (setq ga-compilation-data json)
       (setq ga-bootstream (json-to-bootstream json))
       ;;(message (format "bootstream: %s" ga-bootstream))
-
       (setq ga-assembly-data (json-to-assembled json))
       ;;(message (format "ga-assembly-data=%s" ga-assembly-data))
       (setq ga-compiled-nodes (json-to-compiled json))
@@ -1187,8 +1187,6 @@ Elements of ALIST that are not conses are ignored."
 
 ;; set by ga-run-simulator.el to force loading the simulated bootstream without
 ;; having to reset the chip (which is currently broken)
-(setq ga-load-bootstream nil)
-(setq ga-bootstream nil)
 
 (defun ga-sim-load (assembly)
   (if ga-bootstream
@@ -1202,7 +1200,6 @@ Elements of ALIST that are not conses are ignored."
     (send ga-sim-ga144 load assembly))
   (ga-update-current-node-registers))
 
-
 (defun ga-sim-reset ()
   (send ga-sim-ga144 reset!)
   ;;TODO: rese also wipes the nodes - need to reload
@@ -1210,6 +1207,7 @@ Elements of ALIST that are not conses are ignored."
       (progn
         ;;TODO: should not do this here, or disable reset.
         ;; can't always continue after something has already been loaded.
+        (send (send ga-sim-ga144 coord->node 715) set-pin! 0 t)
         (ga-sim-continue) ;;leaves all nodes in port exec mode
         (send ga-sim-ga144 load-bootstream ga-bootstream)
         (send ga-sim-ga144 reset-time))

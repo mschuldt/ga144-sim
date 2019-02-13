@@ -1035,7 +1035,6 @@
 
     (define/public (suspended?) suspended)
     (define/public (set-map-node node buffer)
-      (printf "set-map-node: ~a ~a" (ga-node-coord node) coord)
       (set! map-node node)
       (set! map-buffer buffer))
 

@@ -7,7 +7,7 @@
 (toggle-debug-on-error)
 (load-theme 'wombat t)
 (set-cursor-color "#ff4500")
-(setq frame-title-format "GA144")
+(setq frame-title-format "GA144 Simulator")
 
 (require 'cl)
 (require 'gv)
@@ -48,21 +48,9 @@
   (let* ((json-object-type 'hash-table)
          (json-array-type 'vector)
          (json-key-type 'string))
-    (princ (json-read-file filename)
-           #'external-debugging-output)
-    (json-read-file filename)
-    ))
+    (json-read-file filename)))
 
-
-;;(setq ga-load-bootstream (member "--sim-bootstream" command-line-args))
-;;TODO: sim bootstream if it is provided in the json
-(setq ga-load-bootstream nil)
-
-(setq ga-default-node-size 6)
-
-;;(when (string= (file-name-extension filename) "ga")
-;;  (setq bowman-format t))
-
+(setq ga-default-node-size 3)
 
 (defun open-sim ()
   ;;  (find-file filename) ;; get filename from json
@@ -77,7 +65,7 @@
   ;;(set-window-buffer (selected-window) ga-sim-buffer)
   ;;(pop-to-buffer ga-sim-buffer)
 
-  (setq mode-line-format "Simulation")
+  (setq mode-line-format "")
   ;;(redraw-display)
   ;;(redraw-frame)
   (delete-other-windows)
