@@ -38,8 +38,7 @@
   (unless file
     (princ "Error: missing filename\n" #'external-debugging-output)
     (kill-emacs))
-  (setq filename (concat (file-name-as-directory dir)file))
-  )
+  (setq filename file))
 
 (load "ga-loadup.el")
 (ga-loadup) ;; TODO: don't loadup compiler here

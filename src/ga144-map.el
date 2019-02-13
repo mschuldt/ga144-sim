@@ -886,9 +886,17 @@ Called after ga-current-node is set"
         n mem)
     (dolist (node-json (hash-table-values (gethash "nodes" json)))
       (puthash (gethash "coord" node-json)
-               (gethash "asm" node-json)
+               (gethash "forth" node-json)
                nodes))
     nodes))
+
+(defun json-to-bootstream (json)
+  (let ((bs (gethash "bootstream" json)))
+    (unless (string= (gethash "type") "async")
+      (princ "Invalid bootstream type. only async to 708 supported"
+             #'external-debugging-output))
+    (when bs
+      (gethash "stream" bs))))
 
 (defun ga-set-compilation-data (json)
   ;;(setq ga-error-data (compiled-error-info data))
@@ -900,6 +908,8 @@ Called after ga-current-node is set"
              )
     (progn
       (setq ga-compilation-data json)
+      (setq ga-bootstream (json-to-bootstream json))
+      ;;(message (format "bootstream: %s" ga-bootstream))
 
       (setq ga-assembly-data (json-to-assembled json))
       ;;(message (format "ga-assembly-data=%s" ga-assembly-data))
@@ -1177,28 +1187,31 @@ Elements of ALIST that are not conses are ignored."
 ;; set by ga-run-simulator.el to force loading the simulated bootstream without
 ;; having to reset the chip (which is currently broken)
 (setq ga-load-bootstream nil)
+(setq ga-bootstream nil)
 
 (defun ga-sim-load (assembly)
-  (if ga-load-bootstream
+  (if ga-bootstream
       (progn
-        (message "Simulating bootstream")
-        ;; todo: get bootstream from input assembly
-        (let ((bs (make-bootstream assembly "async"))) ;;TODO: other bootstream types
-          (message "bootstream:")
-          (message bs)
-          (ga-sim-continue) ;;leaves all nodes in port exec mode
-          (send ga-sim-ga144 load-bootstream bs))
+        ;;(ga-sim-continue) ;;leaves all nodes in port exec mode
+        (send (send ga-sim-ga144 coord->node 715) set-pin! 0 t)
+        (step*)
+
+        (send ga-sim-ga144 load-bootstream ga-bootstream)
         (send ga-sim-ga144 reset-time))
     (send ga-sim-ga144 load assembly))
   (ga-update-current-node-registers))
 
 
-(defun ga-sim-reset (&optional bootstream)
+(defun ga-sim-reset ()
   (send ga-sim-ga144 reset!)
   ;;TODO: rese also wipes the nodes - need to reload
-  (if bootstream
-      (let ((bs (make-bootstream ga-assembly-data "async")))
-        (send ga-sim-ga144 load-bootstream bs))
+  (if ga-bootstream
+      (progn
+        ;;TODO: should not do this here, or disable reset.
+        ;; can't always continue after something has already been loaded.
+        (ga-sim-continue) ;;leaves all nodes in port exec mode
+        (send ga-sim-ga144 load-bootstream ga-bootstream)
+        (send ga-sim-ga144 reset-time))
     (send ga-sim-ga144 load ga-assembly-data))
   (ga-update-current-node-registers)
   (ga-sim-update-display))
