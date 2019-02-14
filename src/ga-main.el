@@ -129,15 +129,15 @@
 
 (defun ga-byte-compile-files ()
   (setq lexical-binding t)
-  (dolist (file '("src/bootstream.rkt"
-                  "src/assemble.rkt"
-                  "src/compile.rkt"
+  (dolist (file '(;;"src/bootstream.rkt"
+                  ;;"src/assemble.rkt"
+                  ;;"src/compile.rkt"
                   "src/disassemble.rkt"
-                  "src/ga-compile-print.rkt"
+                  ;;"src/ga-compile-print.rkt"
                   "src/common.rkt"
                   "src/rom.rkt"
-                  "src/rom-dump.rkt"
-                  "tests/test-compiler.rkt"
+                  ;;"src/rom-dump.rkt"
+                  ;;"tests/test-compiler.rkt"
                   "src/ga144.rkt"
                   "src/f18a.rkt"
                   "src/stack.rkt"
@@ -145,14 +145,14 @@
     (rkt-byte-compile (expand-file-name file)))
 
   (dolist (file '("src/ga-main.el"
-                  "src/aforth-compile.el"
-                  "src/aforth-mode.el"
+                  ;;"src/aforth-compile.el"
+                  ;;"src/aforth-mode.el"
                   "src/ga144-map.el"
-                  "src/aforth-parse.el"
+                  ;;"src/aforth-parse.el"
                   "src/arg-parser.el"
                   "src/rkt.el"
                   "src/ga-loadup.el"
-                  "src/ga144-sim.el"
+                  ;;"src/ga144-sim.el"
                   "src/ga-run-simulator.el"
                   ))
     (byte-compile-file (expand-file-name file))))

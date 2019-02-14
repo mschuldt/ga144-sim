@@ -11,6 +11,7 @@
 
 (require 'cl)
 (require 'gv)
+
 (put 'flet 'byte-obsolete-info nil)
 (add-to-list 'default-frame-alist '(fullscreen . maximized))
 (setq inhibit-startup-message t)
@@ -40,8 +41,10 @@
     (kill-emacs))
   (setq filename file))
 
+
 (load "ga-loadup.el")
-(ga-loadup) ;; TODO: don't loadup compiler here
+(ga-loadup)
+(rkt-load "common.rkt")
 
 (require 'json)
 (defun read-json (filename)

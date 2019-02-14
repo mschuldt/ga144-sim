@@ -4,22 +4,9 @@
 (rkt-load "f18a.rkt")
 (rkt-load "stack.rkt")
 
-(require 'aforth-compile)
 (require 'rkt)
 
 (setq ga-print-execution-time nil)
-
-(defun ga144-run-file (file)
-  (let* ((compiled (aforth-compile-file file))
-         (assembled (assemble compiled))
-         (chip (make-ga144 (file-name-base file) nil)))
-
-    (send chip load assembled)
-    (send (send chip coord->node 705) set-pin! 0 t) ;; set 705.17 high to prevent spi boot
-    (send chip step-program!*)
-    (when ga-print-execution-time
-      (ga-print-execution-time chip))
-    ))
 
 (setq ga144-chips nil)
 (setq ga144-name-to-chip nil)
