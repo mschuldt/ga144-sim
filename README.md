@@ -51,6 +51,23 @@ C-n, C-p, C-b, C-f, C-e, C-a, M-b, M-f, M-m
  - `0` Move view to start of RAM
  - `.` Center view on P
 
+# Simulating the bootstream
+The simulation is automatically setup to simulate the bootstream if
+it is included in the input data.
+Use the `--bootstream` option to do this:
+`ga FILE.ga --sim --bootstream async`
+
+There is currently a bug in the simulator in which the pin 507.17
+cannot be set high. This means the simulator runs the SPI boot
+ROM until it times out, this takes a while so be patient while it starts.
+
+Once initialized, press `c` to continue the simulation and watch the
+bootstream load. Use `a` to switch to the activity view first to watch
+its progress through the chip.
+
+Only the 'async' bootstream through node 708 is supported in simulation.
+The simulator creates a virtual port in node 708 to load the stream
+so it's not running the time consuming async protocol.
+
 # TODO
-- fix simulation of bootstream loading
 - mouse support
